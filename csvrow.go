@@ -10,6 +10,28 @@ import (
   "path/filepath"
 )
 
+var usage = `csv2kvp - extracts key-value data from CSVs
+
+    Usage: csv2kvp [options] <row_selector> <file_locator>
+
+    Arguments:
+      <row_selector>
+             Value from first field in target row
+      <file_locator>
+             Local or remote path to file containing CSV data
+             or URL pointing to CSV data
+
+    Options:
+      -s string
+            Separator between key and value (default "=")
+      -v    Enable verbose output
+
+    Note:
+      The <file_locator> argument supports rclone remotes as
+      paths to CSV data or URLs to CSV data.  However, note 
+      that URLs cannot point to another nested URL.
+`
+
 func isURL(input string) bool {
   return strings.HasPrefix(input, "http://") ||
     strings.HasPrefix(input, "https://")
@@ -61,26 +83,14 @@ func main() {
   var separator string
   var verbose bool
 
-  // Parse flags using the flag package
-  flag.StringVar(&separator, "s", "=", "Separator between key and value")
-  flag.BoolVar(&verbose, "v", false, "Print verbose output")
-
-  // Custom usage function
+  flag.StringVar(&separator, "s", "=", "")
+  flag.BoolVar(&verbose, "v", false, "")
   flag.Usage = func() {
-      programName := filepath.Base(os.Args[0])
-      fmt.Fprintf(os.Stderr, "Parses CSV data and outputs matching row as key-value pairs.\n\n")
-      fmt.Fprintf(os.Stderr, "Usage: %s [options] <search_key> <file_locator>\n\n", programName)
-      fmt.Fprintf(os.Stderr, "Arguments:\n")
-      fmt.Fprintf(os.Stderr, "  <search_key>\n")
-      fmt.Fprintf(os.Stderr, "         Value matching the first field in the target row\n")
-      fmt.Fprintf(os.Stderr, "  <file_locator>\n")
-      fmt.Fprintf(os.Stderr, "         URL or file corresponding to CSV data containing\n")
-      fmt.Fprintf(os.Stderr, "         either actual CSV data or URL to data\n\n")
-      fmt.Fprintf(os.Stderr, "Options:\n")
-      flag.PrintDefaults()
-      fmt.Fprintf(os.Stderr, "\n")
+    programName := filepath.Base(os.Args[0])
+    usage = strings.ReplaceAll(usage, "csv2kvp", programName)
+    usage = strings.ReplaceAll(usage, "\n    ", "\n")
+    fmt.Fprintf(os.Stderr, "%s\n", usage)
   }
-
   flag.Parse()
 
   remainingArgs := flag.Args()
@@ -131,4 +141,3 @@ func main() {
     fmt.Fprintf(os.Stderr, "Pattern not found.")
   }
 }
-
