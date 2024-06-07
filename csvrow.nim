@@ -5,13 +5,19 @@ proc isURL(input: string): bool =
   return input.find("://") != -1
 
 proc getFileContent(fileLocator: string): string =
-  if isURL(fileLocator):
-    let cmd = "rclone copyurl " & fileLocator & " --stdout"
-    let (content, _) = execCmdEx(cmd)
-    return content
-  else:
-    let cmd = "rclone cat " & fileLocator
-    let (content, _) = execCmdEx(cmd)
+    if fileLocator.endswith(":"):
+        return ""
+
+    let cmd = case isURL(fileLocator):
+        of true: "rclone copyurl " & fileLocator & " --stdout"
+        of false: "rclone cat " & fileLocator
+
+    var (content, _) = execCmdEx(cmd)
+    content = content.strip()
+
+    if isURL(content):
+        return getFileContent(content)
+
     return content
 
 proc getRowMatchingSelector(content: string, rowSelector: string): string =
@@ -31,10 +37,10 @@ proc main() =
     let rowSelector = paramStr(1)
     let fileLocator = paramStr(2)
     let fileContent = getFileContent(fileLocator)
-    let matchingRow = getRowMatchingSelector(fileContent, rowSelector).split(",")
     let headerRow = fileContent.split("\n")[0].split(",")
-    printInPairs(headerRow, matchingRow)
+    let matchingRow = getRowMatchingSelector(fileContent, rowSelector).split(",")
+    if matchingRow.len > 2:
+      printInPairs(headerRow, matchingRow)
 
 when isMainModule:
   main()
-
