@@ -10,66 +10,80 @@ import (
   "path/filepath"
 )
 
-var usage = `csv2kvp - extracts key-value data from CSVs
+var usage = `[progName] - extracts key-value data from CSVs
 
-    Usage: csv2kvp [options] <row_selector> <file_locator>
+Usage: [progName] [options] <row_selector> <file_locator>
 
-    Arguments:
-      <row_selector>
-             Value from first field in target row
-      <file_locator>
-             Local or remote path to file containing CSV data
-             or URL pointing to CSV data
+Arguments:
+  <row_selector>
+         Value from first field in target row
+  <file_locator>
+         Local or remote path to file containing CSV data
+         or URL pointing to CSV data
 
-    Options:
-      -s string
-            Separator between key and value (default "=")
-      -v    Enable verbose output
+Options:
+  -s string
+        Separator between key and value (default "=")
+  -v    Enable verbose output
 
-    Note:
-      The <file_locator> argument supports rclone remotes as
-      paths to CSV data or URLs to CSV data.  However, note 
-      that URLs cannot point to another nested URL.
+Note:
+  The <file_locator> argument supports rclone remotes as
+  paths to CSV data. File may contain URL to CSV data,
+  however, cannot point to another nested URL.
 `
+
+// ------------------------------------------------------------------------
 
 func isURL(input string) bool {
   return strings.HasPrefix(input, "http://") ||
     strings.HasPrefix(input, "https://")
 }
 
+// ------------------------------------------------------------------------
+
 func getFileContent(fileLocator string) (string, error) {
-  var data []byte
-  var err error
+    // Define a closure for the recursive logic to prevent infinite loop
+    var fetchContent func(fileLocator string, depth int) (string, error)
+    
+    fetchContent = func(fileLocator string, depth int) (string, error) {
+        if depth > 2 { // Prevent infinite recursion
+            return "", fmt.Errorf("recursion limit reached")
+        }
 
-  // Determine the appropriate rclone command
-  var cmd *exec.Cmd
-  if isURL(fileLocator) {
-    cmd = exec.Command("rclone", "copyurl", fileLocator, "--stdout")
-  } else {
-    cmd = exec.Command("rclone", "cat", fileLocator)
-  }
+        // Determine the appropriate rclone command
+        var cmd *exec.Cmd
+        if isURL(fileLocator) {
+            cmd = exec.Command("rclone", "copyurl", fileLocator, "--stdout")
+        } else {
+            cmd = exec.Command("rclone", "cat", fileLocator)
+        }
 
-  // fmt.Fprintf(os.Stderr, "Running command:", cmd)
-  data, err = cmd.Output()
+        data, err := cmd.Output()
 
-  // Handle errors after fetching data
-  if err != nil {
-    return "", fmt.Errorf("Unable to fetch CSV content: %w", err)
-  }
+        // Handle errors after fetching data
+        if err != nil {
+            return "", fmt.Errorf("unable to fetch content: %w", err)
+        }
 
-  // Normalize line endings and trim whitespace
-  content := strings.ReplaceAll(string(data), "\r\n", "\n")
-  content = strings.TrimSpace(content)
+        // Normalize line endings and trim whitespace
+        content := strings.ReplaceAll(string(data), "\r\n", "\n")
+        content = strings.TrimSpace(content)
 
-  if isURL(content) {
-    return getFileContent(content)
-  } else {
-    return content, nil
-  }
+        if isURL(content) {
+            return fetchContent(content, depth + 1)
+        } else {
+            return content, nil
+        }
+    }
+    
+    // Call the closure with initial depth 0
+    return fetchContent(fileLocator, 0)
 }
 
-func getRecordByKey(lines []string, searchKey string) (string, bool) {
-  pattern := "^" + searchKey + "," // Build pattern with searchKey
+// ------------------------------------------------------------------------
+
+func getRecordByKey(lines []string, rowSelector string) (string, bool) {
+  pattern := "^" + rowSelector + "," // Build pattern with rowSelector
   regex := regexp.MustCompile(pattern)
   for _, line := range lines {
     if regex.MatchString(line) {
@@ -79,53 +93,66 @@ func getRecordByKey(lines []string, searchKey string) (string, bool) {
   return "", false
 }
 
+// ------------------------------------------------------------------------
+
 func main() {
   var separator string
   var verbose bool
 
-  flag.StringVar(&separator, "s", "=", "")
-  flag.BoolVar(&verbose, "v", false, "")
+  // Process commandline flags and args with flag package
+  // ----------------------------------------------------------------------
+  flag.StringVar(&separator, "s", "=", "") // flag desc unused
+  flag.BoolVar(&verbose, "v", false, "")   // flag deec unused
   flag.Usage = func() {
-    programName := filepath.Base(os.Args[0])
-    usage = strings.ReplaceAll(usage, "csv2kvp", programName)
-    usage = strings.ReplaceAll(usage, "\n    ", "\n")
+    progName := filepath.Base(os.Args[0])
+    usage = strings.ReplaceAll(usage, "[progName]", progName)
     fmt.Fprintf(os.Stderr, "%s\n", usage)
   }
   flag.Parse()
 
-  remainingArgs := flag.Args()
+  args := flag.Args()
 
-  if len(remainingArgs) < 2 {
+  if len(args) < 2 {
     flag.Usage()
     return
   }
 
-  searchKey := remainingArgs[0]
-  fileLocator := remainingArgs[1]
+  rowSelector := args[0]
+  fileLocator := args[1]
 
+  // ------------------------------------------------------------------------
   // Fetch CSV content
   csvContent, err := getFileContent(fileLocator)
   if err != nil {
-    fmt.Fprintf(os.Stderr, "Error:", err)
+    fmt.Fprintf(os.Stderr, "Error: %s\n", err)
     return
   }
 
   if verbose {
     fmt.Fprintf(os.Stderr, "Fetched CSV content:\n")
-    fmt.Fprintf(os.Stderr, csvContent)
+    fmt.Fprintf(os.Stderr, "%s\n\n", csvContent)
   }
 
+  // ------------------------------------------------------------------------
   // Process CSV content
   lines := strings.Split(csvContent, "\n")
+
+  if len(lines) < 2 {
+    if verbose {
+      fmt.Fprintf(os.Stderr, "Warning: CSV contains insuffient content.\n")
+    }
+    return
+  }
+
   headerLine := lines[0]
-  recordLine, found := getRecordByKey(lines[1:], searchKey)
+  recordLine, found := getRecordByKey(lines[1:], rowSelector)
 
   if found {
     headers := strings.Split(headerLine, ",")
     values := strings.Split(recordLine, ",")
 
     for i, header := range headers {
-      if strings.ToUpper(header) == header { // Disclude lowercase and mixed case
+      if strings.ToUpper(header) == header { // Consider only allcaps headers
         if i < len(values) { // Ensure index is within values bounds
           fmt.Printf("%s%s%s\n", header, separator, values[i])
         } else {
@@ -138,6 +165,6 @@ func main() {
     }
 
   } else if verbose {
-    fmt.Fprintf(os.Stderr, "Pattern not found.")
+    fmt.Fprintf(os.Stderr, "Waning: Pattern not found.\n")
   }
 }
