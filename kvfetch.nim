@@ -5,7 +5,7 @@
 #
 # usage: kvfetch <record> <source>
 #
-# <record> matches the first column of the target row
+# <record> specifies target row by first column match
 # <source> specifies URL, file path, or rclone remote
 #          files may contain either CSV data or a URL
 #
