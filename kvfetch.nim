@@ -1,16 +1,27 @@
 # kvfetch.nim v1.0
-# retrieve CSV data and dump selected key-value pairs
 # 
 # MIT License (https://opensource.org/licenses/MIT)
 #
-# usage: kvfetch <record> <source>
-#
-# <record> specifies target row by first column match
-# <source> specifies URL, file path, or rclone remote
-#          files may contain either CSV data or a URL
-#
 # compilation with nim:
-#   `$ nim -d:release --gc:orc c kvfetch.nim`
+#   `nim -d:release --gc:orc c kvfetch.nim`
+
+let usage = """
+kvfetch v1.0, ouput selected CSV data as key-value pairs
+Usage: kvfetch <RECORD> <SOURCE>
+
+Where:
+  <RECORD>   Selects target row by first column value.
+  <SOURCE>   Specifies CSV location as URL, file path, 
+             or rclone remote.
+             Files may contain either CSV data or URL.
+
+Exit Status Codes:
+  0 - Success
+  1 - Insufficient arguments
+  2 - Failure to retrieve source
+  3 - Retrieved source is empty
+  4 - No match for specified record
+"""
 
 import
   os, osproc, strutils
@@ -23,7 +34,7 @@ const
   EXIT_NO_MATCH_FOR_RECORD = 4
 
 proc isURL(input: string): bool =
-  return input.find("://") != -1
+  input.find("://") != -1
 
 proc getFileContent(fileLocator: string): string =
   if fileLocator.endswith(":"):
@@ -61,25 +72,16 @@ proc printInPairs(header: seq[string], row: seq[string]): void =
 
 if paramCount() < 2:
   let progName = paramStr(0).splitPath().tail
-  echo progName & " - retrieve CSV data and dump selected key-value pairs\n"
-  echo "Usage: " & progName & " <record> <source>\n"
-  echo "Where:"
-  echo "  <record>    Matches the first column of the target row."
-  echo "  <source>    Specifies URL, file path, or rclone remote."
-  echo "              Files may contain either CSV data or a URL.\n"
-  echo "Exit Status Codes:"
-  echo "  0 - Success"
-  echo "  1 - Insufficient arguments"
-  echo "  2 - Failure to retrieve source"
-  echo "  3 - Retrieved source is empty"
-  echo "  4 - No match for specified record"
+  echo usage.replace("kvfetch",progName)
   quit(EXIT_INSUFFICIENT_ARGS)
+
 else:
-  let rowSelector = paramStr(1)
-  let fileLocator = paramStr(2)
-  let fileContent = getFileContent(fileLocator)
-  let topRowElems = fileContent.split("\n")[0].split(",")
-  let selRowElems = getRowMatchingSelector(fileContent, rowSelector).split(",")
+  let
+    rowSelector = paramStr(1)
+    fileLocator = paramStr(2)
+    fileContent = getFileContent(fileLocator)
+    topRowElems = fileContent.split("\n")[0].split(",")
+    selRowElems = getRowMatchingSelector(fileContent, rowSelector).split(",")
 
   if selRowElems.len > 2:
     printInPairs(topRowElems, selRowElems)
