@@ -65,10 +65,10 @@ proc getRowMatchingSelector(content: string, rowSelector: string): string =
       return line
   quit(EXIT_NO_MATCH_FOR_RECORD)
 
-proc printInPairs(header: seq[string], row: seq[string]): void =
-  for i, headerElem in header.pairs:
-    if i < row.len and headerElem == headerElem.toUpper():
-      echo headerElem, "=", row[i]
+proc printInPairs(keys: seq[string], values: seq[string]): void =
+  for i, key in keys.pairs:
+    if i < values.len and key == key.toUpper():
+      echo key, "=", values[i]
 
 if paramCount() < 2:
   let progName = paramStr(0).splitPath().tail
